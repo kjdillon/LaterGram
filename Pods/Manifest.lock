@@ -1,0 +1,13 @@
+PODS:
+  - FXBlurView (1.6.2)
+  - LXReorderableCollectionViewFlowLayout (0.1.1)
+
+DEPENDENCIES:
+  - FXBlurView (~> 1.6)
+  - LXReorderableCollectionViewFlowLayout (~> 0.1.1)
+
+SPEC CHECKSUMS:
+  FXBlurView: 47496afc9160097fa34af35fc4b310bd85d65dca
+  LXReorderableCollectionViewFlowLayout: b4e25543263e27d4c147109ae5ead01cc9119f23
+
+COCOAPODS: 0.33.1

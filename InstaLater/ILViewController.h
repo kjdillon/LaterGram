@@ -7,7 +7,22 @@
 //
 
 #import <UIKit/UIKit.h>
+#import "LXReorderableCollectionViewFlowLayout.h"
+#import "FXBlurView.h"
+#import "QBImagePickerController.h"
 
-@interface ILViewController : UIViewController
+@interface ILViewController : UIViewController <UICollectionViewDelegate, LXReorderableCollectionViewDataSource,LXReorderableCollectionViewDelegateFlowLayout, UITableViewDelegate, UITableViewDataSource, UINavigationControllerDelegate, QBImagePickerControllerDelegate, UIScrollViewDelegate, UIDocumentInteractionControllerDelegate>
+
+@property (weak, nonatomic) IBOutlet UICollectionView *collectionView;
+
+@property (weak, nonatomic) IBOutlet UITableView *tableView;
+
+@property (strong, nonatomic) NSMutableArray *queue;
+@property (strong, nonatomic) ALAssetsLibrary *library;
+
+- (IBAction)arrowButtonPressed:(id)sender;
+- (IBAction)plusButtonPressed:(id)sender;
+
+@property (weak, nonatomic) IBOutlet FXBlurView *headerView;
 
 @end
