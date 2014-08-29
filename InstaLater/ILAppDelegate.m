@@ -7,15 +7,44 @@
 //
 
 #import "ILAppDelegate.h"
+#import "ILViewController.h"
+#import "ILPostViewController.h"
 
 @implementation ILAppDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
     // Override point for customization after application launch.
+    application.applicationIconBadgeNumber = 0;
+    
+    /*
+    // Handle launching from a notification
+    UILocalNotification *localNotif = [launchOptions objectForKey:UIApplicationLaunchOptionsLocalNotificationKey];
+    if (localNotif) {
+        NSLog(@"Recieved Notification %@",localNotif);
+        UIStoryboard *storyboard = [UIStoryboard storyboardWithName:@"Main" bundle:nil];
+        ILPostViewController *postVC = [storyboard instantiateViewControllerWithIdentifier:@"postVC"];
+        postVC.urlString = [[localNotif userInfo] objectForKey:@"postURLString"];
+        postVC.modalPresentationStyle = UIModalPresentationFullScreen;
+        [self.window.rootViewController presentModalViewController:postVC animated:YES];
+    }
+     */
+    
     return YES;
 }
-							
+
+- (void)application:(UIApplication *)app didReceiveLocalNotification:(UILocalNotification *)notif {
+    // Handle the notificaton when the app is running
+    /*
+    NSLog(@"Recieved Notification %@",notif);
+    UIStoryboard *storyboard = [UIStoryboard storyboardWithName:@"Main" bundle:nil];
+    ILPostViewController *postVC = [storyboard instantiateViewControllerWithIdentifier:@"postVC"];
+    postVC.urlString = [[notif userInfo] objectForKey:@"postURLString"];
+    postVC.modalPresentationStyle = UIModalPresentationFullScreen;
+    [self.window.rootViewController presentModalViewController:postVC animated:YES];
+     */
+}
+
 - (void)applicationWillResignActive:(UIApplication *)application
 {
     // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
@@ -30,7 +59,11 @@
 
 - (void)applicationWillEnterForeground:(UIApplication *)application
 {
+
     // Called as part of the transition from the background to the inactive state; here you can undo many of the changes made on entering the background.
+    
+    NSLog(@"app will enter foreground");
+    NSLog(@"app did become active");
 }
 
 - (void)applicationDidBecomeActive:(UIApplication *)application

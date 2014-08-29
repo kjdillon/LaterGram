@@ -9,13 +9,22 @@
 #import "ILViewController.h"
 #import "InstaPost.h"
 #import "InstaPostCell.h"
+#import "ILPostViewController.h"
 #import <MobileCoreServices/MobileCoreServices.h>
 #import <MediaPlayer/MediaPlayer.h>
+
 
 #define CORNER_RADIUS 5.0f
 #define ACCENT_COLOR [UIColor colorWithRed:23.0/255.0 green:234.0/255.0 blue:166.0/255.0 alpha:0.9]
 
-@interface ILViewController ()
+#define HEADER_VIEW_EXPANDED_HEIGHT 333
+#define HEADER_VIEW_CONTRACTED_HEIGHT 69
+#define HEADER_VIEW_CONTRACTED_ALPHA 0.9
+
+@interface ILViewController () {
+    QBImagePickerController *imagePickerController;
+    UINavigationController *navigationController;
+}
 
 @end
 
@@ -43,7 +52,6 @@ UIDocumentInteractionController *docFile;
 {
     [super viewDidLoad];
     timeArray = [NSArray arrayWithObjects: @"6 Hours", @"12 Hours", @"Morning", @"Evening", @"Weekend", nil];
-    timeArrayIdx = 0;
     
     self.queue = [[NSMutableArray alloc] init];
     
@@ -69,17 +77,98 @@ UIDocumentInteractionController *docFile;
             url = instaPost.imageURL;
         }
         instaPost.asset = [self assetForURL:url];
+        if(instaPost.image == nil) {
+            instaPost.image = [UIImage imageWithCGImage:[[instaPost.asset defaultRepresentation] fullScreenImage]];
+            instaPost.originalImage = [UIImage imageWithCGImage:[[instaPost.asset defaultRepresentation] fullResolutionImage]];
+        }
     }
     
     [self.tableView.layer setCornerRadius:CORNER_RADIUS];
     [self.headerView.layer setCornerRadius:CORNER_RADIUS];
     
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationWillResignActive:) name:UIApplicationWillResignActiveNotification object:nil];
+    
     [self.collectionView reloadData];
     
-    [self.tableView selectRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0] animated:NO scrollPosition:UITableViewScrollPositionNone];
-    [self tableView:self.tableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSInteger idx = [defaults integerForKey:@"postTimeIndex"];
+    timeArrayIdx = idx;
+    [self.tableView selectRowAtIndexPath:[NSIndexPath indexPathForRow:idx inSection:0] animated:NO scrollPosition:UITableViewScrollPositionNone];
     
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationWillResignActive:) name:UIApplicationWillResignActiveNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(appDidBecomeActive:) name:UIApplicationDidBecomeActiveNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(appDidEnterForeground:) name:UIApplicationWillEnterForegroundNotification object:nil];
+
+
+
+
+    //temp
+    /*
+    UILocalNotification *localNotification = [[UILocalNotification alloc] init];
+    if(localNotification != nil) {
+        InstaPost *nextPost = [self.queue objectAtIndex:0];
+        NSURL *url;
+        if(nextPost.videoURL != nil) {
+            url = nextPost.videoURL;
+        } else {
+            url = nextPost.imageURL;
+        }
+        NSDate *currentDate = [NSDate date];
+        NSDate *datePlusOneMinute = currentDate;
+        NSDictionary *data = [NSDictionary dictionaryWithObject:[url absoluteString] forKey:@"postURLString"];
+        [localNotification setUserInfo:data];
+        [localNotification setFireDate:datePlusOneMinute];
+        [localNotification setTimeZone:[NSTimeZone defaultTimeZone]];
+        [localNotification setAlertBody:@"It's time to post!"];
+        [localNotification setAlertAction:@"Okay"];
+        [localNotification setHasAction:YES];
+        [localNotification setApplicationIconBadgeNumber:[[UIApplication sharedApplication] applicationIconBadgeNumber] + 1];
+        [localNotification setSoundName:UILocalNotificationDefaultSoundName];
+        [[UIApplication sharedApplication] scheduleLocalNotification:localNotification];
+    }
+     */
+    
+
+}
+
+- (void)appDidBecomeActive:(NSNotification *)notification {
+    NSLog(@"did become active notification");
+    
+    [self updatePostDates];
+    [self.collectionView reloadData];
+    
+    if(self.backPressed == YES) {
+        self.backPressed = NO;
+        return;
+    }
+    
+    InstaPost *zeroPost = [self.queue objectAtIndex:0];
+    if([zeroPost.postDate compare:[[NSDate alloc] init]] == NSOrderedAscending || [zeroPost.postDate compare:[[NSDate alloc] init]] == NSOrderedSame) {
+        UIStoryboard *storyboard = [UIStoryboard storyboardWithName:@"Main" bundle:nil];
+        ILPostViewController *postVC = [storyboard instantiateViewControllerWithIdentifier:@"postVC"];
+        NSURL *url;
+        if(zeroPost.videoURL != nil) {
+            url = zeroPost.videoURL;
+        } else {
+            url = zeroPost.imageURL;
+        }
+        postVC.urlString = [url absoluteString];
+        postVC.modalPresentationStyle = UIModalPresentationFullScreen;
+        postVC.mainVC = self;
+        [self presentModalViewController:postVC animated:YES];
+    }
+}
+
+- (void)appDidEnterForeground:(NSNotification *)notification {
+    NSLog(@"did enter foreground notification");
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+
+}
+
+-(void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
 }
 
 - (ALAsset *)assetForURL:(NSURL *)url {
@@ -109,6 +198,10 @@ UIDocumentInteractionController *docFile;
 }
 
 - (void)applicationWillResignActive:(NSNotification *)notification {
+    [self archiveData];
+}
+
+-(void)archiveData {
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
     NSString *documentsDirectory = [paths objectAtIndex:0];
     NSString *dataPath = [documentsDirectory stringByAppendingPathComponent:@"/posts"];
@@ -122,6 +215,30 @@ UIDocumentInteractionController *docFile;
         [NSKeyedArchiver archiveRootObject:post toFile:appFile];
         i++;
     }
+}
+
+-(void)animateHeaderView {
+    [UIView transitionWithView:self.arrowButton.imageView duration:0.25f options:UIViewAnimationOptionTransitionCrossDissolve animations:^{
+        if(headerViewExpanded) {
+            [self.arrowButton setImage:[UIImage imageNamed:@"downarrow"] forState:UIControlStateNormal];
+        } else {
+            [self.arrowButton setImage:[UIImage imageNamed:@"uparrow"] forState:UIControlStateNormal];
+        }
+    } completion:NULL];
+    
+    [UIView animateWithDuration:0.25 animations:^{
+        if(headerViewExpanded) {
+            // Contract the header view
+            self.headerView.alpha = HEADER_VIEW_CONTRACTED_ALPHA;
+            self.headerView.frame = CGRectMake(self.headerView.frame.origin.x, self.headerView.frame.origin.y, self.headerView.frame.size.width, HEADER_VIEW_CONTRACTED_HEIGHT);
+        } else {
+            // Expand the header view
+            self.headerView.alpha = 1.0;
+            self.headerView.frame = CGRectMake(self.headerView.frame.origin.x, self.headerView.frame.origin.y, self.headerView.frame.size.width, HEADER_VIEW_EXPANDED_HEIGHT);
+        }
+    } completion:^(BOOL finished) {
+        headerViewExpanded = !headerViewExpanded;
+    }];
 }
 
 #pragma mark - UITableViewDataSource methods
@@ -138,7 +255,12 @@ UIDocumentInteractionController *docFile;
 #pragma mark - UITableViewDelegateSource methods
 
 -(void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    timeArrayIdx = indexPath.item;
+    timeArrayIdx = indexPath.row;
+    
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setInteger:timeArrayIdx forKey:@"postTimeIndex"];
+    [defaults synchronize];
+    
     NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
     [dateFormatter setDateFormat:@"MM-dd-yyyy HH:mm:ss"];
     NSDate *todayDate = [[NSDate alloc] init];
@@ -188,7 +310,41 @@ UIDocumentInteractionController *docFile;
             break;
         default: break;
     }
+    
+    /*
+    
+    int i = 0;
+    for(InstaPost *instaPost in self.queue) {
+        switch(timeArrayIdx) {
+            case 0:
+                instaPost.postDate = [nextPost dateByAddingTimeInterval:sixHours*i];
+                break;
+            case 1:
+                instaPost.postDate = [nextPost dateByAddingTimeInterval:twelveHours*i];
+                break;
+            case 2:
+                instaPost.postDate = [nextPost dateByAddingTimeInterval:oneDay*i];
+                break;
+            case 3:
+                instaPost.postDate = [nextPost dateByAddingTimeInterval:oneDay*i];
+                break;
+            case 4:
+                instaPost.postDate = [nextPost dateByAddingTimeInterval:oneWeek*i];
+                break;
+            default: break;
+        }
+        i++;
+    }
+     */
+    
+    InstaPost *zeroPost = [self.queue objectAtIndex:0];
+    zeroPost.postDate = nextPost;
+    
+    [self updatePostDates];
+    
+    [self animateHeaderView];
     [self.collectionView reloadData];
+    [self archiveData];
 }
 
 #pragma mark - UICollectionViewDelegate methods
@@ -196,26 +352,27 @@ UIDocumentInteractionController *docFile;
 -(void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
     InstaPostCell *instaPostCell = (InstaPostCell*)[collectionView cellForItemAtIndexPath:indexPath];
     if(CGRectEqualToRect(instaPostCell.blurViewCaption.frame, instaPostCell.imageView.frame)){
+        // Removing buttons
         openIndex = nil;
         [UIView animateWithDuration:0.25 animations:^{
             instaPostCell.blurViewCaption.alpha = 0.5;
             instaPostCell.blurViewCaption.backgroundColor = [UIColor colorWithRed:153.0/255.0 green:153.0/255.0 blue:153.0/255.0 alpha:1.0];
+            instaPostCell.tintColor = [UIColor clearColor];
             instaPostCell.blurViewCaption.frame = BLUR_VIEW_RECT;
         } completion:^(BOOL finished) {
             [instaPostCell.blurViewCaption setBlurEnabled:NO];
-            //[self.collectionView reloadItemsAtIndexPaths:[self.collectionView indexPathsForVisibleItems]];
         }];
     } else {
+        // Showing buttons
         openIndex = indexPath;
         [instaPostCell.blurViewCaption setBlurEnabled:YES];
-        instaPostCell.blurViewCaption.dynamic = YES;
+        [instaPostCell.blurViewCaption setDynamic:YES];
         [UIView animateWithDuration:0.25 animations:^{
             instaPostCell.blurViewCaption.alpha = 1.0;
             instaPostCell.blurViewCaption.backgroundColor = [UIColor clearColor];
             instaPostCell.blurViewCaption.frame = instaPostCell.imageView.frame;
         } completion:^(BOOL finished) {
-            instaPostCell.blurViewCaption.dynamic = NO;
-            //[self.collectionView reloadItemsAtIndexPaths:[self.collectionView indexPathsForVisibleItems]];
+                [instaPostCell.blurViewCaption setDynamic:NO];
         }];
     }
 }
@@ -236,11 +393,6 @@ UIDocumentInteractionController *docFile;
         instaPostCell.playButton.hidden = NO;
     } else {
         instaPostCell.playButton.hidden = YES;
-    }
-    
-    if(instaPost.image == nil) {
-        instaPost.image = [UIImage imageWithCGImage:[[instaPost.asset defaultRepresentation] fullScreenImage]];
-        instaPost.originalImage = [UIImage imageWithCGImage:[[instaPost.asset defaultRepresentation] fullResolutionImage]];
     }
     
     [instaPostCell.imageView setImage:instaPost.image];
@@ -276,24 +428,6 @@ UIDocumentInteractionController *docFile;
     instaPostCell.layer.shadowOpacity = 0.5f;
     instaPostCell.layer.shadowPath = shadowPath.CGPath;
     
-    switch(timeArrayIdx) {
-        case 0:
-            instaPost.postDate = [nextPost dateByAddingTimeInterval:sixHours*(indexPath.item)];
-            break;
-        case 1:
-            instaPost.postDate = [nextPost dateByAddingTimeInterval:twelveHours*(indexPath.item)];
-            break;
-        case 2:
-            instaPost.postDate = [nextPost dateByAddingTimeInterval:oneDay*(indexPath.item)];
-            break;
-        case 3:
-            instaPost.postDate = [nextPost dateByAddingTimeInterval:oneDay*(indexPath.item)];
-            break;
-        case 4:
-            instaPost.postDate = [nextPost dateByAddingTimeInterval:oneWeek*(indexPath.item)];
-            break;
-        default: break;
-    }
     /*
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
     [formatter setDateFormat:@"MM-dd-yyyy HH:mm:ss"];
@@ -301,42 +435,56 @@ UIDocumentInteractionController *docFile;
      */
     
     // Schedule notification
-    /*
-    UILocalNotification *localNotification = [[UILocalNotification alloc] init];
-    if(localNotification != nil) {
-        NSDate *date = [NSDate date];
-        NSDate *dateToFire = [date dateByAddingTimeInterval:60];
-        [localNotification setFireDate:dateToFire];
-        [localNotification setTimeZone:[NSTimeZone defaultTimeZone]];
-        NSDictionary *data = [NSDictionary dictionaryWithObject:instaPost forKey:@"post"];
-        [localNotification setUserInfo:data];
-        [localNotification setAlertBody:@"It's time to post!" ];
-        [localNotification setAlertAction:@"Okay"];
-        [localNotification setHasAction:YES];
-        [localNotification setApplicationIconBadgeNumber:[[UIApplication sharedApplication] applicationIconBadgeNumber] + 1];
-        [localNotification setSoundName:UILocalNotificationDefaultSoundName];
-        [[UIApplication sharedApplication] scheduleLocalNotification:localNotification];
-    }
-     */
-    
-    
     NSDate *curDate = [[NSDate alloc] init];
-    NSTimeInterval timeUntil = [instaPost.postDate timeIntervalSinceDate:curDate];
-    int mins = timeUntil/60.0;
-    int hours = timeUntil/60.0/60.0;
-    int days = timeUntil/60.0/60.0/24.0;
+    
+    if(indexPath.item == 0 && [instaPost.postDate compare:curDate] == NSOrderedDescending) {
+        UILocalNotification *localNotification = [[UILocalNotification alloc] init];
+        if(localNotification != nil) {
+            NSDate *dateToFire = instaPost.postDate;
+            [localNotification setFireDate:dateToFire];
+            [localNotification setTimeZone:[NSTimeZone defaultTimeZone]];
+            NSURL *url;
+            if(instaPost.videoURL != nil) {
+                url = instaPost.videoURL;
+            } else {
+                url = instaPost.imageURL;
+            }
+            //[self deleteNotificationWithURLString:[url absoluteString]];
+            [self deletePreviousNotifications];
+            NSArray *objs = [NSArray arrayWithObjects:@"LATERGRAM_NOTIF",@"postURLString", nil];
+            NSArray *keys = [NSArray arrayWithObjects:@"LATERGRAM_NOTIF",[url absoluteString], nil];
+            NSDictionary *data = [NSDictionary dictionaryWithObjects:objs forKeys:keys];
+            [localNotification setUserInfo:data];
+            [localNotification setAlertBody:@"It's time to post!"];
+            [localNotification setAlertAction:@"Okay"];
+            [localNotification setHasAction:YES];
+            [localNotification setApplicationIconBadgeNumber:[[UIApplication sharedApplication] applicationIconBadgeNumber] + 1];
+            [localNotification setSoundName:UILocalNotificationDefaultSoundName];
+            [[UIApplication sharedApplication] scheduleLocalNotification:localNotification];
+        }
+    }
+    
     NSString *caption;
-    if(days != 0) {
-        NSString *daysString = (days != 1) ? @"days" : @"day";
-        NSString *hoursString = ((hours%24) != 1) ? @"hours" : @"hour";
-        caption = [NSString stringWithFormat:@"Posting in %d %@, %d %@", days, daysString, hours%24, hoursString];
-    } else if(hours != 0) {
-        NSString *minsString = ((mins%60) != 1) ? @"mins" : @"min";
-        NSString *hoursString = (hours != 1) ? @"hours" : @"hour";
-        caption = [NSString stringWithFormat:@"Posting in %d %@, %d %@", hours, hoursString, mins%60, minsString];
+    NSTimeInterval timeUntil = [instaPost.postDate timeIntervalSinceDate:curDate];
+    if(timeUntil <= 0) {
+        caption = @"Post it now!";
     } else {
-        NSString *minsString = ((mins) != 1) ? @"mins" : @"min";
-        caption = [NSString stringWithFormat:@"Posting in %d minutes %@", mins, minsString];
+        int mins = timeUntil/60.0;
+        int hours = timeUntil/60.0/60.0;
+        int days = timeUntil/60.0/60.0/24.0;
+
+        if(days != 0) {
+            NSString *daysString = (days != 1) ? @"days" : @"day";
+            NSString *hoursString = ((hours%24) != 1) ? @"hours" : @"hour";
+            caption = [NSString stringWithFormat:@"Posting in %d %@, %d %@", days, daysString, hours%24, hoursString];
+        } else if(hours != 0) {
+            NSString *minsString = ((mins%60) != 1) ? @"mins" : @"min";
+            NSString *hoursString = (hours != 1) ? @"hours" : @"hour";
+            caption = [NSString stringWithFormat:@"Posting in %d %@, %d %@", hours, hoursString, mins%60, minsString];
+        } else {
+            NSString *minsString = ((mins) != 1) ? @"mins" : @"min";
+            caption = [NSString stringWithFormat:@"Posting in %d minutes %@", mins, minsString];
+        }
     }
     instaPostCell.caption.text = caption;
     
@@ -345,6 +493,39 @@ UIDocumentInteractionController *docFile;
     instaPostCell.instaPost = instaPost;
 
     return instaPostCell;
+}
+
+-(void) deletePreviousNotifications {
+    UIApplication *app = [UIApplication sharedApplication];
+    NSArray *eventArray = [app scheduledLocalNotifications];
+    for (int i=0; i<[eventArray count]; i++)
+    {
+        UILocalNotification* oneEvent = [eventArray objectAtIndex:i];
+        NSDictionary *userInfoCurrent = oneEvent.userInfo;
+        NSString *uniqueString=[NSString stringWithFormat:@"%@",[userInfoCurrent valueForKey:@"LATERGRAM_NOTIF"]];
+        if ([uniqueString isEqualToString:@"LATERGRAM_NOTIF"])
+        {
+            //Cancelling local notification
+            [app cancelLocalNotification:oneEvent];
+        }
+    }
+}
+
+-(void) deleteNotificationWithURLString:(NSString *)urlString {
+    UIApplication *app = [UIApplication sharedApplication];
+    NSArray *eventArray = [app scheduledLocalNotifications];
+    for (int i=0; i<[eventArray count]; i++)
+    {
+        UILocalNotification* oneEvent = [eventArray objectAtIndex:i];
+        NSDictionary *userInfoCurrent = oneEvent.userInfo;
+        NSString *uniqueString=[NSString stringWithFormat:@"%@",[userInfoCurrent valueForKey:@"postURLString"]];
+        if ([uniqueString isEqualToString:urlString])
+        {
+            //Cancelling local notification
+            [app cancelLocalNotification:oneEvent];
+            break;
+        }
+    }
 }
 
 -(void)postButtonClicked:(UIButton*)sender
@@ -366,9 +547,10 @@ UIDocumentInteractionController *docFile;
         docFile.annotation = [NSDictionary dictionaryWithObject:captionString forKey:@"InstagramCaption"];
         docFile.UTI = @"com.instagram.exclusivegram";
         [docFile presentOpenInMenuFromRect: self.view.frame inView:self.view animated:YES];
+        
+        [self removeButtonClicked:sender];
     }
-    else
-    {
+    else {
         UIAlertView *message = [[UIAlertView alloc] initWithTitle:@"Instagram Not Installed"
                                                           message:@"Please install Instagram."
                                                          delegate:nil
@@ -383,9 +565,29 @@ UIDocumentInteractionController *docFile;
 {
     // Animate removal from list
     InstaPostCell *instaPostCell = (InstaPostCell*)[self.collectionView cellForItemAtIndexPath:[NSIndexPath indexPathForItem:sender.tag inSection:0]];
+    
+    NSURL *url;
+    InstaPost *instaPost = instaPostCell.instaPost;
+    if(instaPost.videoURL != nil) {
+        url = instaPost.videoURL;
+    } else {
+        url = instaPost.imageURL;
+    }
+    [self deleteNotificationWithURLString:[url absoluteString]];
+    
     openIndex = nil;
+    
+    NSDate *prevDate = instaPost.postDate;
+    for(int i = sender.tag+1; i < self.queue.count; i++) {
+        InstaPost *insta = [self.queue objectAtIndex:i];
+        NSDate *tempDate = insta.postDate;
+        insta.postDate = prevDate;
+        prevDate = tempDate;
+    }
+    
     [self.queue removeObjectAtIndex:sender.tag];
     [self.collectionView reloadData];
+    [self archiveData];
 }
 
 MPMoviePlayerViewController *movieController;
@@ -401,13 +603,21 @@ MPMoviePlayerViewController *movieController;
 #pragma mark - LXReorderableCollectionViewDataSource methods
 
 - (void)collectionView:(UICollectionView *)collectionView itemAtIndexPath:(NSIndexPath *)fromIndexPath willMoveToIndexPath:(NSIndexPath *)toIndexPath {
+    InstaPost *zeroPost = [self.queue objectAtIndex:0];
+    NSDate *zeroDate = zeroPost.postDate;
+    
     InstaPost *instaPost = [self.queue objectAtIndex:fromIndexPath.item];
     
     [self.queue removeObjectAtIndex:fromIndexPath.item];
     [self.queue insertObject:instaPost atIndex:toIndexPath.item];
+    
+    // Make sure zero date stays accurate.
+    zeroPost = [self.queue objectAtIndex:0];
+    zeroPost.postDate = zeroDate;
 }
 
 -(void)collectionView:(UICollectionView *)collectionView itemAtIndexPath:(NSIndexPath *)fromIndexPath didMoveToIndexPath:(NSIndexPath *)toIndexPath {
+    [self updatePostDates];
     [self.collectionView reloadData];
 }
 
@@ -439,51 +649,22 @@ MPMoviePlayerViewController *movieController;
 
 #pragma mark - Button pressed methods
 
-#define HEADER_VIEW_EXPANDED_HEIGHT 333
-#define HEADER_VIEW_CONTRACTED_HEIGHT 69
-#define HEADER_VIEW_CONTRACTED_ALPHA 0.9
 - (IBAction)arrowButtonPressed:(id)sender {
-    [UIView animateWithDuration:0.25 animations:^{
-        if(headerViewExpanded) {
-            // Contract the header view
-            self.headerView.alpha = HEADER_VIEW_CONTRACTED_ALPHA;
-            self.headerView.frame = CGRectMake(self.headerView.frame.origin.x, self.headerView.frame.origin.y, self.headerView.frame.size.width, HEADER_VIEW_CONTRACTED_HEIGHT);
-        } else {
-            // Expand the header view
-            self.headerView.alpha = 1.0;
-            self.headerView.frame = CGRectMake(self.headerView.frame.origin.x, self.headerView.frame.origin.y, self.headerView.frame.size.width, HEADER_VIEW_EXPANDED_HEIGHT);
-        }
-    } completion:^(BOOL finished) {
-        headerViewExpanded = !headerViewExpanded;
-    }];
+    [self animateHeaderView];
 }
 
 - (IBAction)plusButtonPressed:(id)sender {
-    /*
-    if ([UIImagePickerController isSourceTypeAvailable: UIImagePickerControllerSourceTypeSavedPhotosAlbum]) {
-        UIImagePickerController *imagePicker = [[UIImagePickerController alloc] init];
-        imagePicker.delegate = self;
-        imagePicker.navigationBar.barTintColor = ACCENT_COLOR;
-        imagePicker.navigationBar.tintColor = [UIColor whiteColor];
-        NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:[UIFont fontWithName:@"GillSans-Light" size:24],NSFontAttributeName, [UIColor whiteColor], NSForegroundColorAttributeName, nil];
-        [imagePicker.navigationBar setTitleTextAttributes:attributes];
-        imagePicker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
-        imagePicker.mediaTypes = @[(NSString *) kUTTypeImage];
-        imagePicker.allowsEditing = YES;
-        [self presentViewController:imagePicker animated:YES completion:nil];
-    }
-     */
-    
     if (![QBImagePickerController isAccessible]) {
         NSLog(@"Error: Source is not accessible.");
         return;
     }
-    QBImagePickerController *imagePickerController = [[QBImagePickerController alloc] init];
+    
+    imagePickerController = [[QBImagePickerController alloc] init];
     imagePickerController.delegate = self;
     imagePickerController.navigationController.delegate = self;
     imagePickerController.allowsMultipleSelection = YES;
     
-    UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:imagePickerController];
+    navigationController = [[UINavigationController alloc] initWithRootViewController:imagePickerController];
     navigationController.navigationBar.barTintColor = ACCENT_COLOR;
     navigationController.navigationBar.tintColor = [UIColor whiteColor];
     NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:[UIFont fontWithName:@"GillSans-Light" size:24],NSFontAttributeName, [UIColor whiteColor], NSForegroundColorAttributeName, nil];
@@ -521,10 +702,76 @@ MPMoviePlayerViewController *movieController;
             instaPost.videoURL = nil;
             instaPost.imageURL = [[asset defaultRepresentation] url];
         }
+        
         [self.queue addObject:instaPost];
     }
+    
+    [self updatePostDates];
+    
     [self.collectionView reloadData];
+    
     [self dismissImagePickerController];
+}
+
+-(void) updatePostDates {
+    NSDate *latestDate;
+    // Init latest date based on timeArrayIdx
+    switch(timeArrayIdx) {
+        case 0:
+            latestDate = [[[NSDate alloc] init] dateByAddingTimeInterval:sixHours];
+            break;
+        case 1:
+            latestDate = [[[NSDate alloc] init] dateByAddingTimeInterval:twelveHours];
+            break;
+        case 2:
+            latestDate = [[[NSDate alloc] init] dateByAddingTimeInterval:oneDay];
+            break;
+        case 3:
+            latestDate = [[[NSDate alloc] init] dateByAddingTimeInterval:oneDay];
+            break;
+        case 4:
+            latestDate = [[[NSDate alloc] init] dateByAddingTimeInterval:oneWeek];
+            break;
+        default: break;
+    }
+    
+    int i = 0;
+    for(InstaPost *instaPost in self.queue) {
+        NSDate *curDate = [[NSDate alloc] init];
+        if(i == 0) {
+            if(instaPost.postDate == nil) {
+                instaPost.postDate = latestDate;
+            }
+            else if([instaPost.postDate compare:curDate] == NSOrderedAscending) {
+                instaPost.postDate = curDate;
+            }
+            latestDate = instaPost.postDate;
+            i++;
+            continue;
+        }
+        
+        // Otherwise
+        switch(timeArrayIdx) {
+            case 0:
+                instaPost.postDate = [latestDate dateByAddingTimeInterval:sixHours*i];
+                break;
+            case 1:
+                instaPost.postDate = [latestDate dateByAddingTimeInterval:twelveHours*i];
+                break;
+            case 2:
+                instaPost.postDate = [latestDate dateByAddingTimeInterval:oneDay*i];
+                break;
+            case 3:
+                instaPost.postDate = [latestDate dateByAddingTimeInterval:oneDay*i];
+                break;
+            case 4:
+                instaPost.postDate = [latestDate dateByAddingTimeInterval:oneWeek*i];
+                break;
+            default: break;
+        }
+        i++;
+    }
+
 }
 
 - (void)imagePickerControllerDidCancel:(QBImagePickerController *)imagePickerController

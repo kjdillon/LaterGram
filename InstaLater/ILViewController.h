@@ -17,12 +17,15 @@
 
 @property (weak, nonatomic) IBOutlet UITableView *tableView;
 
+@property (nonatomic) BOOL backPressed;
+
 @property (strong, nonatomic) NSMutableArray *queue;
 @property (strong, nonatomic) ALAssetsLibrary *library;
 
 - (IBAction)arrowButtonPressed:(id)sender;
 - (IBAction)plusButtonPressed:(id)sender;
 
+@property (weak, nonatomic) IBOutlet UIButton *arrowButton;
 @property (weak, nonatomic) IBOutlet FXBlurView *headerView;
 
 @end
