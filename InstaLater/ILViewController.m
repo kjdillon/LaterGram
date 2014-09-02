@@ -78,8 +78,15 @@ UIDocumentInteractionController *docFile;
         }
         instaPost.asset = [self assetForURL:url];
         if(instaPost.image == nil) {
-            instaPost.image = [UIImage imageWithCGImage:[[instaPost.asset defaultRepresentation] fullScreenImage]];
-            instaPost.originalImage = [UIImage imageWithCGImage:[[instaPost.asset defaultRepresentation] fullResolutionImage]];
+            ALAssetRepresentation* representation = [instaPost.asset defaultRepresentation];
+            UIImageOrientation orientation = UIImageOrientationUp;
+            NSNumber* orientationValue = [instaPost.asset valueForProperty:@"ALAssetPropertyOrientation"];
+            if (orientationValue != nil) {
+                orientation = [orientationValue intValue];
+            }
+            CGFloat scale  = 1;
+            instaPost.originalImage = [UIImage imageWithCGImage:[representation fullResolutionImage] scale:scale orientation:orientation];
+            instaPost.image = [UIImage imageWithCGImage:[representation fullScreenImage]];
         }
     }
     
@@ -102,7 +109,6 @@ UIDocumentInteractionController *docFile;
 
 
     //temp
-    /*
     UILocalNotification *localNotification = [[UILocalNotification alloc] init];
     if(localNotification != nil) {
         InstaPost *nextPost = [self.queue objectAtIndex:0];
@@ -125,7 +131,6 @@ UIDocumentInteractionController *docFile;
         [localNotification setSoundName:UILocalNotificationDefaultSoundName];
         [[UIApplication sharedApplication] scheduleLocalNotification:localNotification];
     }
-     */
     
 
 }
@@ -141,21 +146,26 @@ UIDocumentInteractionController *docFile;
         return;
     }
     
-    InstaPost *zeroPost = [self.queue objectAtIndex:0];
-    if([zeroPost.postDate compare:[[NSDate alloc] init]] == NSOrderedAscending || [zeroPost.postDate compare:[[NSDate alloc] init]] == NSOrderedSame) {
-        UIStoryboard *storyboard = [UIStoryboard storyboardWithName:@"Main" bundle:nil];
-        ILPostViewController *postVC = [storyboard instantiateViewControllerWithIdentifier:@"postVC"];
-        NSURL *url;
-        if(zeroPost.videoURL != nil) {
-            url = zeroPost.videoURL;
-        } else {
-            url = zeroPost.imageURL;
+    if(self.queue.count > 0) {
+        InstaPost *zeroPost = [self.queue objectAtIndex:0];
+        if([zeroPost.postDate compare:[[NSDate alloc] init]] == NSOrderedAscending || [zeroPost.postDate compare:[[NSDate alloc] init]] == NSOrderedSame) {
+            UIStoryboard *storyboard = [UIStoryboard storyboardWithName:@"Main" bundle:nil];
+            ILPostViewController *postVC = [storyboard instantiateViewControllerWithIdentifier:@"postVC"];
+            NSURL *url;
+            if(zeroPost.videoURL != nil) {
+                url = zeroPost.videoURL;
+            } else {
+                url = zeroPost.imageURL;
+            }
+            postVC.urlString = [url absoluteString];
+            postVC.modalPresentationStyle = UIModalPresentationFullScreen;
+            postVC.mainVC = self;
+            [self presentModalViewController:postVC animated:YES];
         }
-        postVC.urlString = [url absoluteString];
-        postVC.modalPresentationStyle = UIModalPresentationFullScreen;
-        postVC.mainVC = self;
-        [self presentModalViewController:postVC animated:YES];
     }
+    
+    UIApplication *app = [UIApplication sharedApplication];
+    app.applicationIconBadgeNumber = 0;
 }
 
 - (void)appDidEnterForeground:(NSNotification *)notification {
@@ -239,6 +249,10 @@ UIDocumentInteractionController *docFile;
     } completion:^(BOOL finished) {
         headerViewExpanded = !headerViewExpanded;
     }];
+}
+
+-(void) removeZeroPost {
+    
 }
 
 #pragma mark - UITableViewDataSource methods
@@ -483,7 +497,7 @@ UIDocumentInteractionController *docFile;
             caption = [NSString stringWithFormat:@"Posting in %d %@, %d %@", hours, hoursString, mins%60, minsString];
         } else {
             NSString *minsString = ((mins) != 1) ? @"mins" : @"min";
-            caption = [NSString stringWithFormat:@"Posting in %d minutes %@", mins, minsString];
+            caption = [NSString stringWithFormat:@"Posting in %d %@", mins, minsString];
         }
     }
     instaPostCell.caption.text = caption;
@@ -528,36 +542,184 @@ UIDocumentInteractionController *docFile;
     }
 }
 
--(void)postButtonClicked:(UIButton*)sender
-{
-    // Post to instagram
-    NSURL *instagramURL = [NSURL URLWithString:@"instagram://"];
-    if ([[UIApplication sharedApplication] canOpenURL:instagramURL])
-    {
-        InstaPost *instaPost = [self.queue objectAtIndex:sender.tag];
-        UIImage* photoImage = instaPost.originalImage;
-        NSData* imageData = UIImagePNGRepresentation(photoImage);
-        NSString* captionString = instaPost.caption;
-        NSString* imagePath = [NSString stringWithFormat:@"%@/instagramShare.igo", [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) lastObject]];
-        [imageData writeToFile:imagePath atomically:NO];
-        NSURL* fileURL = [NSURL fileURLWithPath:[NSString stringWithFormat:@"file://%@",imagePath]];
-        
-        docFile=[UIDocumentInteractionController interactionControllerWithURL:[NSURL fileURLWithPath:imagePath]];
-        docFile.delegate = self;
-        docFile.annotation = [NSDictionary dictionaryWithObject:captionString forKey:@"InstagramCaption"];
-        docFile.UTI = @"com.instagram.exclusivegram";
-        [docFile presentOpenInMenuFromRect: self.view.frame inView:self.view animated:YES];
-        
-        [self removeButtonClicked:sender];
-    }
-    else {
-        UIAlertView *message = [[UIAlertView alloc] initWithTitle:@"Instagram Not Installed"
-                                                          message:@"Please install Instagram."
+- (void) video: (NSString *) videoPath didFinishSavingWithError: (NSError *) error contextInfo: (void *) contextInfo {
+    NSLog(@"Video saved with error: %@", error);
+}
+
+-(NSString*)savedVideoPathForAsset:(ALAsset*)asset {
+    ALAssetRepresentation *rep = [asset defaultRepresentation];
+    Byte *buffer = (Byte*)malloc(rep.size);
+    NSUInteger buffered = [rep getBytes:buffer fromOffset:0.0 length:rep.size error:nil];
+    NSData *videoData = [NSData dataWithBytesNoCopy:buffer length:buffered freeWhenDone:YES];
+    NSString *videoPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"temp.mov"];
+    BOOL success = [videoData writeToFile:videoPath atomically:NO];
+    if(success == YES) {
+        return videoPath;
+    } else {
+        UIAlertView *message = [[UIAlertView alloc] initWithTitle:@"Video Data Is Corrupted"
+                                                          message:@"Please try a different video."
                                                          delegate:nil
                                                 cancelButtonTitle:@"OK"
                                                 otherButtonTitles:nil];
         [message show];
+        return nil;
     }
+}
+
+-(void)postButtonClicked:(UIButton*)sender
+{
+    // Post to instagram
+    InstaPost *instaPost = [self.queue objectAtIndex:sender.tag];
+
+    if ([[instaPost.asset valueForProperty:ALAssetPropertyType] isEqualToString:ALAssetTypeVideo]) {
+        NSString *videopath = [self savedVideoPathForAsset:instaPost.asset];
+        if (UIVideoAtPathIsCompatibleWithSavedPhotosAlbum(videopath)) {
+            UISaveVideoAtPathToSavedPhotosAlbum(videopath, self, @selector(video:didFinishSavingWithError:contextInfo:), nil);
+        }
+        
+        UIAlertView *message = [[UIAlertView alloc] initWithTitle:@"Video Saved"
+                                                          message:@"You'll now to transfered to Instagram, simply choose the most recently saved video."
+                                                         delegate:nil
+                                                cancelButtonTitle:@"OK"
+                                                otherButtonTitles:nil];
+        message.delegate = self;
+        message.tag = 123;
+        [message show];
+        
+        if([instaPost.postDate compare:[[NSDate alloc] init]] == NSOrderedAscending || [instaPost.postDate compare:[[NSDate alloc] init]] == NSOrderedSame) {
+            [self removePostAndDontUpdate:0];
+        } else {
+            [self removeButtonClicked:sender];
+        }
+    } else {
+        NSURL *instagramURL = [NSURL URLWithString:@"instagram://"];
+        if ([[UIApplication sharedApplication] canOpenURL:instagramURL])
+        {
+            UIImage* tempPhotoImage = instaPost.originalImage;
+            UIImage* photoImage = [self unrotateImage:tempPhotoImage];
+            NSData* imageData = UIImageJPEGRepresentation(photoImage, 1);
+            NSString* captionString = instaPost.caption;
+            NSString* imagePath = [NSString stringWithFormat:@"%@/instagramShare.igo", [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) lastObject]];
+            [imageData writeToFile:imagePath atomically:NO];
+            NSURL* fileURL = [NSURL fileURLWithPath:[NSString stringWithFormat:@"file://%@",imagePath]];
+            
+            docFile=[UIDocumentInteractionController interactionControllerWithURL:[NSURL fileURLWithPath:imagePath]];
+            docFile.delegate = self;
+            docFile.annotation = [NSDictionary dictionaryWithObject:captionString forKey:@"InstagramCaption"];
+            docFile.UTI = @"com.instagram.exclusivegram";
+            [docFile presentOpenInMenuFromRect: self.view.frame inView:self.view animated:YES];
+            
+            if([instaPost.postDate compare:[[NSDate alloc] init]] == NSOrderedAscending || [instaPost.postDate compare:[[NSDate alloc] init]] == NSOrderedSame) {
+                [self removePostAndDontUpdate:0];
+            } else {
+                [self removeButtonClicked:sender];
+            }
+        }
+        else {
+            UIAlertView *message = [[UIAlertView alloc] initWithTitle:@"Instagram Not Installed"
+                                                              message:@"Please install Instagram."
+                                                             delegate:nil
+                                                    cancelButtonTitle:@"OK"
+                                                    otherButtonTitles:nil];
+            [message show];
+        }
+    }
+    
+    [self collectionView: self.collectionView didSelectItemAtIndexPath:[NSIndexPath indexPathForItem:sender.tag inSection:0]];
+}
+
+// Helper method to fix orientation issues when exporting to Instagram
+- (UIImage *)normalizedImage:(UIImage*)image {
+    UIGraphicsBeginImageContextWithOptions(image.size, NO, image.scale);
+    [image drawInRect:(CGRect){0, 0, image.size}];
+    UIImage *normalizedImage = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return normalizedImage;
+}
+- (UIImage*)unrotateImage:(UIImage*)image {
+    CGSize size = image.size;
+    UIGraphicsBeginImageContext(size);
+    [image drawInRect:CGRectMake(0,0,size.width ,size.height)];
+    UIImage* newImage = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    
+    return newImage;
+}
+
+- (UIImage *)fixrotation:(UIImage *)image{
+    if (image.imageOrientation == UIImageOrientationUp) return image;
+    CGAffineTransform transform = CGAffineTransformIdentity;
+    
+    switch (image.imageOrientation) {
+        case UIImageOrientationDown:
+        case UIImageOrientationDownMirrored:
+            transform = CGAffineTransformTranslate(transform, image.size.width, image.size.height);
+            transform = CGAffineTransformRotate(transform, M_PI);
+            break;
+            
+        case UIImageOrientationLeft:
+        case UIImageOrientationLeftMirrored:
+            transform = CGAffineTransformTranslate(transform, image.size.width, 0);
+            transform = CGAffineTransformRotate(transform, M_PI_2);
+            break;
+            
+        case UIImageOrientationRight:
+        case UIImageOrientationRightMirrored:
+            transform = CGAffineTransformTranslate(transform, 0, image.size.height);
+            transform = CGAffineTransformRotate(transform, -M_PI_2);
+            break;
+        case UIImageOrientationUp:
+        case UIImageOrientationUpMirrored:
+            transform = CGAffineTransformIdentity;
+            break;
+    }
+    
+    switch (image.imageOrientation) {
+        case UIImageOrientationUpMirrored:
+        case UIImageOrientationDownMirrored:
+            transform = CGAffineTransformTranslate(transform, image.size.width, 0);
+            transform = CGAffineTransformScale(transform, -1, 1);
+            break;
+            
+        case UIImageOrientationLeftMirrored:
+        case UIImageOrientationRightMirrored:
+            transform = CGAffineTransformTranslate(transform, image.size.height, 0);
+            transform = CGAffineTransformScale(transform, -1, 1);
+            break;
+        case UIImageOrientationUp:
+        case UIImageOrientationDown:
+        case UIImageOrientationLeft:
+        case UIImageOrientationRight:
+            break;
+    }
+    
+    // Now we draw the underlying CGImage into a new context, applying the transform
+    // calculated above.
+    CGContextRef ctx = CGBitmapContextCreate(NULL, image.size.width, image.size.height,
+                                             CGImageGetBitsPerComponent(image.CGImage), 0,
+                                             CGImageGetColorSpace(image.CGImage),
+                                             CGImageGetBitmapInfo(image.CGImage));
+    CGContextConcatCTM(ctx, transform);
+    switch (image.imageOrientation) {
+        case UIImageOrientationLeft:
+        case UIImageOrientationLeftMirrored:
+        case UIImageOrientationRight:
+        case UIImageOrientationRightMirrored:
+            // Grr...
+            CGContextDrawImage(ctx, CGRectMake(0,0,image.size.height,image.size.width), image.CGImage);
+            break;
+            
+        default:
+            CGContextDrawImage(ctx, CGRectMake(0,0,image.size.width,image.size.height), image.CGImage);
+            break;
+    }
+    
+    // And now we just create a new UIImage from the drawing context
+    CGImageRef cgimg = CGBitmapContextCreateImage(ctx);
+    UIImage *img = [UIImage imageWithCGImage:cgimg];
+    CGContextRelease(ctx);
+    CGImageRelease(cgimg);
+    return img;
     
 }
 
@@ -578,7 +740,7 @@ UIDocumentInteractionController *docFile;
     openIndex = nil;
     
     NSDate *prevDate = instaPost.postDate;
-    for(int i = sender.tag+1; i < self.queue.count; i++) {
+    for(int i = sender.tag + 1; i < self.queue.count; i++) {
         InstaPost *insta = [self.queue objectAtIndex:i];
         NSDate *tempDate = insta.postDate;
         insta.postDate = prevDate;
@@ -590,6 +752,12 @@ UIDocumentInteractionController *docFile;
     [self archiveData];
 }
 
+-(void)removePostAndDontUpdate:(int)index
+{
+    [self.queue removeObjectAtIndex:index];
+    [self.collectionView reloadData];
+}
+
 MPMoviePlayerViewController *movieController;
 -(void)playButtonClicked:(UIButton*)sender
 {
@@ -598,6 +766,16 @@ MPMoviePlayerViewController *movieController;
     movieController = [[MPMoviePlayerViewController alloc] initWithContentURL:instaPostCell.instaPost.videoURL];
     [self presentMoviePlayerViewControllerAnimated:movieController];
     [movieController.moviePlayer play];
+}
+
+#pragma mark - UIAlertViewDelegate
+- (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex {
+    if(alertView.tag == 123) {
+        NSURL *instagramURL = [NSURL URLWithString:@"instagram://camera"];
+        if ([[UIApplication sharedApplication] canOpenURL:instagramURL]) {
+            [[UIApplication sharedApplication] openURL:instagramURL];
+        }
+    }
 }
 
 #pragma mark - LXReorderableCollectionViewDataSource methods
@@ -692,13 +870,27 @@ MPMoviePlayerViewController *movieController;
         InstaPost *instaPost = [[InstaPost alloc] init];
         instaPost.asset = asset;
         if ([[asset valueForProperty:ALAssetPropertyType] isEqualToString:ALAssetTypeVideo]) {
-            instaPost.image = [UIImage imageWithCGImage:[[asset defaultRepresentation] fullScreenImage]];
-            instaPost.originalImage = [UIImage imageWithCGImage:[[asset defaultRepresentation] fullResolutionImage]];
+            ALAssetRepresentation* representation = [asset defaultRepresentation];
+            UIImageOrientation orientation = UIImageOrientationUp;
+            NSNumber* orientationValue = [asset valueForProperty:@"ALAssetPropertyOrientation"];
+            if (orientationValue != nil) {
+                orientation = [orientationValue intValue];
+            }
+            CGFloat scale  = 1;
+            instaPost.originalImage = [UIImage imageWithCGImage:[representation fullResolutionImage] scale:scale orientation:orientation];
+            instaPost.image = [UIImage imageWithCGImage:[representation fullScreenImage]];
             instaPost.videoURL = [[asset defaultRepresentation] url];
             instaPost.imageURL = nil;
         } else {
-            instaPost.image = [UIImage imageWithCGImage:[[asset defaultRepresentation] fullScreenImage]];
-            instaPost.originalImage = [UIImage imageWithCGImage:[[asset defaultRepresentation] fullResolutionImage]];
+            ALAssetRepresentation* representation = [asset defaultRepresentation];
+            UIImageOrientation orientation = UIImageOrientationUp;
+            NSNumber* orientationValue = [asset valueForProperty:@"ALAssetPropertyOrientation"];
+            if (orientationValue != nil) {
+                orientation = [orientationValue intValue];
+            }
+            CGFloat scale  = 1;
+            instaPost.originalImage = [UIImage imageWithCGImage:[representation fullResolutionImage] scale:scale orientation:orientation];
+            instaPost.image = [UIImage imageWithCGImage:[representation fullScreenImage]];
             instaPost.videoURL = nil;
             instaPost.imageURL = [[asset defaultRepresentation] url];
         }

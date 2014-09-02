@@ -33,7 +33,7 @@
         [self.contentView addSubview:imageView];
         self.imageView = imageView;
         
-        UIImageView *videoImageView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 20, 20)];
+        UIImageView *videoImageView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 30, 30)];
         videoImageView.center = self.contentView.center;
         [videoImageView setImage:[UIImage imageNamed:@"video.png"]];
         [videoImageView setContentMode:UIViewContentModeScaleAspectFit];

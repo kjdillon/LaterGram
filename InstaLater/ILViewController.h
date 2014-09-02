@@ -11,7 +11,7 @@
 #import "FXBlurView.h"
 #import "QBImagePickerController.h"
 
-@interface ILViewController : UIViewController <UICollectionViewDelegate, LXReorderableCollectionViewDataSource,LXReorderableCollectionViewDelegateFlowLayout, UITableViewDelegate, UITableViewDataSource, UINavigationControllerDelegate, QBImagePickerControllerDelegate, UIScrollViewDelegate, UIDocumentInteractionControllerDelegate>
+@interface ILViewController : UIViewController <UICollectionViewDelegate, LXReorderableCollectionViewDataSource,LXReorderableCollectionViewDelegateFlowLayout, UITableViewDelegate, UITableViewDataSource, UINavigationControllerDelegate, QBImagePickerControllerDelegate, UIScrollViewDelegate, UIDocumentInteractionControllerDelegate, UIAlertViewDelegate>
 
 @property (weak, nonatomic) IBOutlet UICollectionView *collectionView;
 
@@ -24,6 +24,10 @@
 
 - (IBAction)arrowButtonPressed:(id)sender;
 - (IBAction)plusButtonPressed:(id)sender;
+
+-(void)removeButtonClicked:(UIButton*)sender;
+
+-(void)removePostAndDontUpdate:(int)index;
 
 @property (weak, nonatomic) IBOutlet UIButton *arrowButton;
 @property (weak, nonatomic) IBOutlet FXBlurView *headerView;

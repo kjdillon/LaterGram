@@ -202,6 +202,8 @@
     
     if ([[asset valueForProperty:ALAssetPropertyType] isEqualToString:ALAssetTypeVideo]) {
         cell.videoImageView.hidden = NO;
+    } else {
+        cell.videoImageView.hidden = YES;
     }
     
     return cell;
