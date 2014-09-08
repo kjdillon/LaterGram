@@ -12,6 +12,7 @@
 #import "ILPostViewController.h"
 #import <MobileCoreServices/MobileCoreServices.h>
 #import <MediaPlayer/MediaPlayer.h>
+#import "ILOnboardViewController1.h"
 
 
 #define CORNER_RADIUS 5.0f
@@ -90,6 +91,8 @@ UIDocumentInteractionController *docFile;
         }
     }
     
+    [self checkForDeletedPosts];
+    
     [self.tableView.layer setCornerRadius:CORNER_RADIUS];
     [self.headerView.layer setCornerRadius:CORNER_RADIUS];
     
@@ -106,11 +109,10 @@ UIDocumentInteractionController *docFile;
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(appDidEnterForeground:) name:UIApplicationWillEnterForegroundNotification object:nil];
 
 
-
-
     //temp
+    /*
     UILocalNotification *localNotification = [[UILocalNotification alloc] init];
-    if(localNotification != nil) {
+    if(localNotification != nil && self.queue.count > 0) {
         InstaPost *nextPost = [self.queue objectAtIndex:0];
         NSURL *url;
         if(nextPost.videoURL != nil) {
@@ -131,12 +133,47 @@ UIDocumentInteractionController *docFile;
         [localNotification setSoundName:UILocalNotificationDefaultSoundName];
         [[UIApplication sharedApplication] scheduleLocalNotification:localNotification];
     }
+     */
     
 
+
+}
+
+-(void)checkForDeletedPosts {
+    NSMutableArray *badIndexs = [[NSMutableArray alloc] init];
+    int index = 0;
+    for (InstaPost *post in self.queue) {
+        if(post.asset == nil) {
+            [badIndexs addObject:[NSNumber numberWithInt:index]];
+        }
+        index++;
+    }
+    for(NSNumber *number in badIndexs) {
+        int badIndex = [number integerValue];
+        UIButton *button = [[UIButton alloc] init];
+        button.tag = badIndex;
+        [self removeButtonClicked:button];
+    }
+}
+
+- (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender
+{
+//    if ([[segue identifier] isEqualToString:@"onboard"])
+//    {
+//        ILOnboardViewController1 *onboardVC = [segue destinationViewController];
+//    }
 }
 
 - (void)appDidBecomeActive:(NSNotification *)notification {
     NSLog(@"did become active notification");
+    
+    // saving an NSInteger
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    BOOL shownOnboard = [defaults boolForKey:@"kOnboardPresented"];
+    if(shownOnboard == nil || shownOnboard == NO) {
+        [defaults setBool:YES forKey:@"kOnboardPresented"];
+        [self performSegueWithIdentifier:@"onboard" sender:nil];
+    }
     
     [self updatePostDates];
     [self.collectionView reloadData];
@@ -184,10 +221,12 @@ UIDocumentInteractionController *docFile;
 - (ALAsset *)assetForURL:(NSURL *)url {
     __block ALAsset *result = nil;
     __block NSError *assetError = nil;
-    dispatch_semaphore_t sema = dispatch_semaphore_create(0);
+    __block BOOL resultComplete = NO;
     
+    dispatch_semaphore_t sema = dispatch_semaphore_create(0);
     [self.library assetForURL:url resultBlock:^(ALAsset *asset) {
         result = asset;
+        resultComplete = YES;
         dispatch_semaphore_signal(sema);
     } failureBlock:^(NSError *error) {
         assetError = error;
@@ -196,7 +235,7 @@ UIDocumentInteractionController *docFile;
     
     
     if ([NSThread isMainThread]) {
-        while (!result && !assetError) {
+        while (!resultComplete && !assetError) {
             [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate distantFuture]];
         }
     }
@@ -903,6 +942,9 @@ MPMoviePlayerViewController *movieController;
     [self.collectionView reloadData];
     
     [self dismissImagePickerController];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^(void){
+        [self loadInterstitial];
+    });
 }
 
 -(void) updatePostDates {
@@ -993,5 +1035,50 @@ InstaPostCell *prevMiddleCell;
     }
 }
  */
+
+#pragma mark GADInterstitialDelegate implementation
+
+- (void)interstitialDidReceiveAd:(GADInterstitial *)interstitial {
+    // Add is available at this point.
+    NSLog(@"The interstitial ad was received and is ready to be shown");
+    self.interstitial = interstitial;
+    [self showInterstitial];
+}
+
+- (void)interstitial:(GADInterstitial *)interstitial didFailToReceiveAdWithError:(GADRequestError *)error {
+    NSLog(@"There was an error receiving the interstitial ad: %@", error);
+}
+
+#pragma mark GADRequest implementation
+
+- (GADRequest *)request {
+    GADRequest *request = [GADRequest request];
+    
+    //    // Make the request for a test ad. Put in an identifier for the simulator as well as any devices
+    //    // you want to receive test ads.
+    //request.testDevices = @[@"44d43ed56d55ebe7f97a8e6ac28d95ff"];
+    request.testing = NO;
+    
+    return request;
+}
+
+#pragma mark Insterstitial button actions
+NSString *kAdUintID = @"ca-app-pub-4897781316376761/6218339331";
+- (void)loadInterstitial {
+    // Create a new GADInterstitial each time.  A GADInterstitial will only show one request in its
+    // lifetime. The property will release the old one and set the new one.
+    self.interstitial = [[GADInterstitial alloc] init];
+    self.interstitial.delegate = self;
+    
+    self.interstitial.adUnitID = kAdUintID;
+    [self.interstitial loadRequest:[self request]];
+}
+
+- (void)showInterstitial {
+    // Show the interstitial.
+    [self.interstitial presentFromRootViewController:self];
+    //[self loadInterstitial];
+}
+
 
 @end

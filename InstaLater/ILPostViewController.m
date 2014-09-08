@@ -14,6 +14,8 @@
 
 @implementation ILPostViewController
 
+bool dontPostNotification;
+
 - (id)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
 {
     self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
@@ -45,15 +47,24 @@
          self.playButton.hidden = YES;
      }
     
+    if(self.asset == nil) {
+        dontPostNotification = YES;
+        [self backPressed:nil];
+    } else {
+        dontPostNotification = NO;
+    }
+    
 }
 
 - (ALAsset *)assetForURL:(NSURL *)url {
     __block ALAsset *result = nil;
     __block NSError *assetError = nil;
+    __block BOOL resultComplete = NO;
     dispatch_semaphore_t sema = dispatch_semaphore_create(0);
     
     [self.library assetForURL:url resultBlock:^(ALAsset *asset) {
         result = asset;
+        resultComplete = YES;
         dispatch_semaphore_signal(sema);
     } failureBlock:^(NSError *error) {
         assetError = error;
@@ -62,7 +73,7 @@
     
     
     if ([NSThread isMainThread]) {
-        while (!result && !assetError) {
+        while (!resultComplete && !assetError) {
             [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate distantFuture]];
         }
     }
@@ -166,7 +177,46 @@ UIDocumentInteractionController *docFile;
      */
     self.mainVC.backPressed = YES;
     
+    if(dontPostNotification == NO) {
+    UILocalNotification *localNotification = [[UILocalNotification alloc] init];
+        if(localNotification != nil) {
+            NSDate *curDate = [[NSDate alloc] init];
+            NSDate *dateToFire = [curDate dateByAddingTimeInterval:6*60*60];
+            [localNotification setFireDate:dateToFire];
+            [localNotification setTimeZone:[NSTimeZone defaultTimeZone]];
+            NSURL *url = [NSURL URLWithString:self.urlString];
+            //[self deleteNotificationWithURLString:[url absoluteString]];
+            [self deletePreviousNotifications];
+            NSArray *objs = [NSArray arrayWithObjects:@"LATERGRAM_NOTIF",@"postURLString", nil];
+            NSArray *keys = [NSArray arrayWithObjects:@"LATERGRAM_NOTIF",[url absoluteString], nil];
+            NSDictionary *data = [NSDictionary dictionaryWithObjects:objs forKeys:keys];
+            [localNotification setUserInfo:data];
+            [localNotification setAlertBody:@"It's time to post!"];
+            [localNotification setAlertAction:@"Okay"];
+            [localNotification setHasAction:YES];
+            [localNotification setApplicationIconBadgeNumber:[[UIApplication sharedApplication] applicationIconBadgeNumber] + 1];
+            [localNotification setSoundName:UILocalNotificationDefaultSoundName];
+            [[UIApplication sharedApplication] scheduleLocalNotification:localNotification];
+        }
+    }
+
     [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+-(void) deletePreviousNotifications {
+    UIApplication *app = [UIApplication sharedApplication];
+    NSArray *eventArray = [app scheduledLocalNotifications];
+    for (int i=0; i<[eventArray count]; i++)
+    {
+        UILocalNotification* oneEvent = [eventArray objectAtIndex:i];
+        NSDictionary *userInfoCurrent = oneEvent.userInfo;
+        NSString *uniqueString=[NSString stringWithFormat:@"%@",[userInfoCurrent valueForKey:@"LATERGRAM_NOTIF"]];
+        if ([uniqueString isEqualToString:@"LATERGRAM_NOTIF"])
+        {
+            //Cancelling local notification
+            [app cancelLocalNotification:oneEvent];
+        }
+    }
 }
 
 MPMoviePlayerViewController *movieController;

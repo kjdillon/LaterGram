@@ -10,8 +10,10 @@
 #import "LXReorderableCollectionViewFlowLayout.h"
 #import "FXBlurView.h"
 #import "QBImagePickerController.h"
+#import "GADInterstitial.h"
+#import "GADInterstitialDelegate.h"
 
-@interface ILViewController : UIViewController <UICollectionViewDelegate, LXReorderableCollectionViewDataSource,LXReorderableCollectionViewDelegateFlowLayout, UITableViewDelegate, UITableViewDataSource, UINavigationControllerDelegate, QBImagePickerControllerDelegate, UIScrollViewDelegate, UIDocumentInteractionControllerDelegate, UIAlertViewDelegate>
+@interface ILViewController : UIViewController <UICollectionViewDelegate, LXReorderableCollectionViewDataSource,LXReorderableCollectionViewDelegateFlowLayout, UITableViewDelegate, UITableViewDataSource, UINavigationControllerDelegate, QBImagePickerControllerDelegate, UIScrollViewDelegate, UIDocumentInteractionControllerDelegate, UIAlertViewDelegate, GADInterstitialDelegate>
 
 @property (weak, nonatomic) IBOutlet UICollectionView *collectionView;
 
@@ -31,5 +33,7 @@
 
 @property (weak, nonatomic) IBOutlet UIButton *arrowButton;
 @property (weak, nonatomic) IBOutlet FXBlurView *headerView;
+
+@property(strong, nonatomic) GADInterstitial *interstitial;
 
 @end
