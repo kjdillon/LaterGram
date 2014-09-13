@@ -752,7 +752,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = AB12C6999ACE46278DDBCFF5 /* Pods.xcconfig */;
 			buildSettings = {
-				CODE_SIGN_IDENTITY = "iPhone Distribution: KYLE DILLON (H2C7XT8Z43)";
+				CODE_SIGN_IDENTITY = "iPhone Developer: KYLE DILLON (6E9TS7GJL8)";
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "InstaLater/LaterGram-Prefix.pch";
 				INFOPLIST_FILE = "InstaLater/LaterGram-Info.plist";

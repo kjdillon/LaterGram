@@ -84,6 +84,10 @@ bool dontPostNotification;
     return result;
 }
 
+- (void) video: (NSString *) videoPath didFinishSavingWithError: (NSError *) error contextInfo: (void *) contextInfo {
+    NSLog(@"Video saved with error: %@", error);
+}
+
 -(NSString*)savedVideoPathForAsset:(ALAsset*)asset {
     ALAssetRepresentation *rep = [asset defaultRepresentation];
     Byte *buffer = (Byte*)malloc(rep.size);
@@ -145,6 +149,9 @@ UIDocumentInteractionController *docFile;
                                                     otherButtonTitles:nil];
             [message show];
         }
+        
+        dontPostNotification = YES;
+        [self backPressed:nil];
     }
 }
 
@@ -155,6 +162,9 @@ UIDocumentInteractionController *docFile;
         if ([[UIApplication sharedApplication] canOpenURL:instagramURL]) {
             [[UIApplication sharedApplication] openURL:instagramURL];
         }
+        
+        dontPostNotification = YES;
+        [self backPressed:nil];
     }
 }
 
