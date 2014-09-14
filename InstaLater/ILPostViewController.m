@@ -115,7 +115,6 @@ UIDocumentInteractionController *docFile;
         if (UIVideoAtPathIsCompatibleWithSavedPhotosAlbum(videopath)) {
             UISaveVideoAtPathToSavedPhotosAlbum(videopath, self, @selector(video:didFinishSavingWithError:contextInfo:), nil);
         }
-        
         UIAlertView *message = [[UIAlertView alloc] initWithTitle:@"Video Saved"
                                                           message:@"You'll now to transfered to Instagram, simply choose the most recently saved video."
                                                          delegate:nil
@@ -162,6 +161,8 @@ UIDocumentInteractionController *docFile;
         if ([[UIApplication sharedApplication] canOpenURL:instagramURL]) {
             [[UIApplication sharedApplication] openURL:instagramURL];
         }
+        
+        [self.mainVC removePostAndDontUpdate:0];
         
         dontPostNotification = YES;
         [self backPressed:nil];
